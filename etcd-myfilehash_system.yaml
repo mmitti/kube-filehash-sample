@@ -1,0 +1,131 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: myfilehash-system-config
+  namespace: default
+data:
+  conf-path: "/dat/conf.json" #init-podで生成するコンフィグファイル
+  dl-path: "/dat/files/" #s3からダウンロードしたファイルの一時置き場
+  s3-fin: "/dat/s3fin" #ダウンロード終了を示すファイル
+  hash-fin: "/dat/hashfin" #ダウンロード終了を示すファイル
+  api: "http://192.168.137.20:8080/" #kubernetesが動いているURL
+  namespace: "default" #kubernetesのネームスペース
+  etcd-port: "2379" #etcdを動かすポート番号
+  etcd-sufix: "/test" #etcdのキーのサフィックス
+---
+kind: ReplicationController
+apiVersion: v1
+metadata:
+  name: myfilehash-system
+  labels:
+    app: myfilehash-system
+spec:
+  replicas: 1
+  selector:
+    app: myfilehash-system
+  template:
+    metadata:
+      name: myfilehash-system
+      labels:
+        app: myfilehash-system
+    spec:
+      containers:
+      - name: init
+        image: mmitti/init-pod
+        volumeMounts:
+        - name: data
+          mountPath: /dat
+        env:
+        - name: API
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: api
+        - name: NAMESPACE
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: namespace
+        - name: ETCD_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: etcd-port
+        - name: ETCD_SUFIX
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: etcd-sufix
+        - name: CONF_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: conf-path
+        - name: DL_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: dl-path
+        - name: S3_FIN
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: s3-fin
+        - name: HASH_FIN
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: hash-fin
+
+      - name: file-hasher
+        image: mmitti/file-hasher2
+        volumeMounts:
+        - name: data
+          mountPath: /dat
+        env:
+        - name: DL_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: dl-path
+        - name: CONF_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: conf-path
+        - name: S3_FIN
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: s3-fin
+        - name: HASH_FIN
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: hash-fin
+
+      - name: s3-fetch-tool
+        image: mmitti/s3-fetch-tool2
+        volumeMounts:
+        - name: data
+          mountPath: /dat
+        env:
+        - name: DL_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: dl-path
+        - name: CONF_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: conf-path
+        - name: S3_FIN
+          valueFrom:
+            configMapKeyRef:
+              name: myfilehash-system-config
+              key: s3-fin
+      volumes:
+      - name: data
+        emptyDir: {}
+---
