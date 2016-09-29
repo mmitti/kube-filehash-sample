@@ -20,7 +20,7 @@ metadata:
   labels:
     app: myfilehash-system
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     app: myfilehash-system
   template:
