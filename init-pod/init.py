@@ -9,12 +9,12 @@ import time
 #NAMESPACE=default
 #HOSTNAME=etcd-hab77
 #ETCD_PORT=2379
-#ETCD_SUFIX=/test
+#ETCD_PREFIX=/test
 #CONF_PATH=/dat/conf.json
 #DL_PATH=/dat/tmp
 #S3_FIN=/dat/s3fin
 #HASH_FIN=/dat/hashfin
-suf = ""
+pre = ""
 
 # 現在未処理の仕事を取得する
 # 見つかればreq/id/jobカウントをデクリメントしjobカウントが0であればreq/idを削除する
@@ -24,23 +24,23 @@ def enter_job(client):
     job = 0
     root = ""
     # /req内のIDを列挙
-    r = client.read(suf+"/req", sorted=True, waitIndex=10)
+    r = client.read(pre+"/req", sorted=True, waitIndex=10)
     for j in r.children:
         # /reqも含まれるので無視
-        if j.key == suf+"/req":
+        if j.key == pre+"/req":
             continue
         id = j.key.split('/')[-1]
-        job = int(client.read(suf+"/req/"+id+"/job").value)
+        job = int(client.read(pre+"/req/"+id+"/job").value)
         # jobカウントが0より大きければデクリメントして採用する
         if job > 0:
             job -= 1
-            client.write(suf+"/req/"+id+"/job", job)
+            client.write(pre+"/req/"+id+"/job", job)
             exec_id = id
-            method = client.read(suf+"/req/"+id+"/method").value
-            root = client.read(suf+"/req/"+id+"/root").value
+            method = client.read(pre+"/req/"+id+"/method").value
+            root = client.read(pre+"/req/"+id+"/root").value
         # デクリメント後も含めて0以下であればreqを削除
         if job <= 0:
-            client.delete(suf+"/req/"+id, recursive=True)
+            client.delete(pre+"/req/"+id, recursive=True)
         if exec_id is not None:
             break
     return (exec_id, method, root, job)
@@ -48,9 +48,9 @@ def enter_job(client):
 def last_wip_jobid(client, id):
     max_id = 0
     try:
-        r = client.read(suf+"/wip/"+str(id))
+        r = client.read(pre+"/wip/"+str(id))
         for j in r.children:
-            if j.key == suf+"/wip/"+str(id):
+            if j.key == pre+"/wip/"+str(id):
                 continue
             wid = int(j.key.split('/')[-1])
             max_id = max(max_id, wid)
@@ -60,7 +60,7 @@ def last_wip_jobid(client, id):
 
 def get_wip_end_range(client, id, jid):
     try:
-        return int(client.read(suf+"/wip/"+str(id)+"/"+str(jid)+"/range/end").value)
+        return int(client.read(pre+"/wip/"+str(id)+"/"+str(jid)+"/range/end").value)
     except:
         return -1
 
@@ -71,10 +71,10 @@ def create_wip(client, id, remain_job_count):
     range_start = get_wip_end_range(client, id, last_id) + 1
     range_end = int((0xFF - range_start) / div_count) + range_start
 
-    client.write(suf+"/wip/"+str(id)+"/"+str(jobid)+"/host", os.environ["HOSTNAME"])
-    client.write(suf+"/wip/"+str(id)+"/"+str(jobid)+"/last_filename", "")
-    client.write(suf+"/wip/"+str(id)+"/"+str(jobid)+"/range/start", range_start)
-    client.write(suf+"/wip/"+str(id)+"/"+str(jobid)+"/range/end", range_end)
+    client.write(pre+"/wip/"+str(id)+"/"+str(jobid)+"/host", os.environ["HOSTNAME"])
+    client.write(pre+"/wip/"+str(id)+"/"+str(jobid)+"/last_filename", "")
+    client.write(pre+"/wip/"+str(id)+"/"+str(jobid)+"/range/start", range_start)
+    client.write(pre+"/wip/"+str(id)+"/"+str(jobid)+"/range/end", range_end)
     return (jobid, range_start, range_end)
 
 
@@ -84,7 +84,7 @@ if __name__ == '__main__':
         j = res.read().decode('utf-8')
         data = json.loads(j)
     nodeIP = data['status']['hostIP']
-    suf = os.environ["ETCD_SUFIX"]
+    pre = os.environ["ETCD_PREFIX"]
 
     client = etcd.Client(host=nodeIP, port=int(os.environ["ETCD_PORT"]))
 
@@ -109,7 +109,7 @@ if __name__ == '__main__':
 
     dat = {}
     dat['etcd_ip'] = nodeIP
-    dat['etcd_suffix'] = suf
+    dat['etcd_prefix'] = pre
     dat['etcd_port'] = int(os.environ["ETCD_PORT"])
     dat['req_id'] = exec_id
     dat['job_id'] = jobid
@@ -117,13 +117,13 @@ if __name__ == '__main__':
     dat['range_end'] = range_end
     dat['method'] = method
     dat['root'] = root
-    dat['s3_key'] = client.read(suf+"/conf/s3_key").value
-    dat['s3_secret'] = client.read(suf+"/conf/s3_secret").value
-    dat['s3_bucket'] = client.read(suf+"/conf/s3_bucket").value
-    dat['mysql_host'] = client.read(suf+"/conf/mysql_host").value
-    dat['mysql_name'] = client.read(suf+"/conf/mysql_name").value
-    dat['mysql_pass'] = client.read(suf+"/conf/mysql_pass").value
-    dat['mysql_user'] = client.read(suf+"/conf/mysql_user").value
+    dat['s3_key'] = client.read(pre+"/conf/s3_key").value
+    dat['s3_secret'] = client.read(pre+"/conf/s3_secret").value
+    dat['s3_bucket'] = client.read(pre+"/conf/s3_bucket").value
+    dat['mysql_host'] = client.read(pre+"/conf/mysql_host").value
+    dat['mysql_name'] = client.read(pre+"/conf/mysql_name").value
+    dat['mysql_pass'] = client.read(pre+"/conf/mysql_pass").value
+    dat['mysql_user'] = client.read(pre+"/conf/mysql_user").value
     try:
         os.makedirs(os.environ["DL_PATH"])
     except:
@@ -138,7 +138,7 @@ if __name__ == '__main__':
         or not os.path.exists(os.environ["HASH_FIN"]):
         time.sleep(10)
 
-    client.write(suf+"/done/"+str(exec_id)+"/"+str(jobid)+"/host", os.environ["HOSTNAME"])
+    client.write(pre+"/done/"+str(exec_id)+"/"+str(jobid)+"/host", os.environ["HOSTNAME"])
 
 
     os.remove(os.environ["CONF_PATH"])

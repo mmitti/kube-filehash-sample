@@ -11,7 +11,7 @@ data:
   api: "http://192.168.137.20:8080/" #kubernetesが動いているURL
   namespace: "default" #kubernetesのネームスペース
   etcd-port: "2379" #etcdを動かすポート番号
-  etcd-sufix: "/test" #etcdのキーのサフィックス
+  etcd-prefix: "/test" #etcdのキーのプリフィックス
 ---
 kind: ReplicationController
 apiVersion: v1
@@ -51,11 +51,11 @@ spec:
             configMapKeyRef:
               name: myfilehash-system-config
               key: etcd-port
-        - name: ETCD_SUFIX
+        - name: ETCD_PREFIX
           valueFrom:
             configMapKeyRef:
               name: myfilehash-system-config
-              key: etcd-sufix
+              key: etcd-prefix
         - name: CONF_PATH
           valueFrom:
             configMapKeyRef:
